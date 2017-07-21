@@ -1,0 +1,178 @@
+#!/usr/bin/env php
+<?php
+define('HOSTS_PATH', '/etc/hosts');
+define('VHOST_DIR', '/etc/apache2/extra/vhosts/');
+
+function print_ln($str){
+    echo $str . PHP_EOL;
+}
+
+function check_argv($argv, $count){
+    if (count($argv) != $count){
+        print_ln('ERROR: Invalid arguments.');
+        die();
+    }
+}
+
+function check_files(){
+    if (!file_exists(HOSTS_PATH)){
+        print_ln('ERROR: ' . HOSTS_PATH . ' not found.');
+    }
+    elseif (!is_writable(HOSTS_PATH)){
+        print_ln('ERROR: ' . HOSTS_PATH . ' not writable. Re-run with \'sudo\'.');
+    }
+    elseif (!is_writable(VHOST_DIR)){
+        print_ln('ERROR: ' . VHOST_DIR . ' not writable. Re-run with \'sudo\'.');
+    }
+    else{
+        return true;
+    }
+    
+    die();
+}
+
+function restart_apache(){
+    print_ln('Restarting apache.');
+    shell_exec('apachectl restart');
+}
+
+function get_vhost($domain, $path, $port){
+    return  '<VirtualHost *:' . $port . '>' . PHP_EOL .
+            '    DocumentRoot "' . $path . '"' . PHP_EOL .
+            '    ServerName ' . $domain . PHP_EOL .
+            '    <Directory "' . $path . '">' . PHP_EOL .
+            '        Options Indexes FollowSymLinks MultiViews' . PHP_EOL .
+            '        AllowOverride All' . PHP_EOL .
+            '        Require all granted' . PHP_EOL .
+            '    </Directory>' . PHP_EOL .
+            '</VirtualHost>';
+}
+
+function add_domain_to_hosts($domain, $hosts){
+    print_ln('Adding domain to hosts file.');
+    $_hosts = explode(PHP_EOL, $hosts);
+    
+    foreach ($_hosts as $line) {
+        if (substr(trim($line), 0, 1) == '#'){
+            continue;
+        }
+
+        $host = explode(' ', $line);
+
+        if ($host[0] == '127.0.0.1' && 
+            $host[1] == $domain){
+            return $hosts;
+        }
+    }
+
+    $_hosts[] = '127.0.0.1 ' . $domain;
+
+    return implode(PHP_EOL, $_hosts);
+}
+
+function remove_domain_from_hosts($domain, $hosts){
+    print_ln('Removing domain from hosts file.');
+    $_hosts = explode(PHP_EOL, $hosts);
+    
+    foreach ($_hosts as $index => $line) {
+        if (substr(trim($line), 0, 1) == '#'){
+            continue;
+        }
+
+        $host = explode(' ', $line);
+
+        if ($host[0] == '127.0.0.1' && 
+            $host[1] == $domain){
+            unset($_hosts[$index]);
+            break;
+        }
+    }
+
+    return implode(PHP_EOL, $_hosts);
+}
+
+function add_vhost($domain, $path){
+    print_ln('Adding virtual host.');
+    if (strpos($domain, ':')){
+        $domain = explode(':', $domain);
+        $port = $domain[1];
+        $domain = $domain[0];
+    }
+    else{
+        $port = 80;
+    }
+
+    $vhost = get_vhost($domain, $path, $port);
+    $vhost_name = VHOST_DIR . $domain . '.conf';
+
+    file_put_contents($vhost_name, $vhost);
+
+    $hosts = file_get_contents(HOSTS_PATH);
+    $hosts = add_domain_to_hosts($domain, $hosts);
+
+    file_put_contents(HOSTS_PATH, $hosts);
+    restart_apache();
+    print_ln($domain . ' added successfully!');
+}
+
+function remove_vhost($domain){
+    print_ln('Removing virtual host.');
+    $vhost_name = VHOST_DIR . $domain . '.conf';
+
+    if (file_exists($vhost_name)){
+        unlink($vhost_name);
+    }
+
+    $hosts = file_get_contents(HOSTS_PATH);
+    $hosts = remove_domain_from_hosts($domain, $hosts);
+
+    file_put_contents(HOSTS_PATH, $hosts);
+    restart_apache();
+    print_ln($domain . ' removed successfully!');
+}
+
+function list_vhosts(){
+    $vhosts = scandir(VHOST_DIR);
+
+    foreach ($vhosts as $vhost){
+        if ($vhost == '.' || $vhost == '..') continue;
+
+        $data = file_get_contents(VHOST_DIR . $vhost);
+
+        $data = explode(PHP_EOL, $data);
+
+        $server_name = false;
+        $document_root = false;
+
+        foreach ($data as $line){
+            if (strpos($line, 'ServerName')){
+                $server_name = trim(str_replace('ServerName', '', $line));
+            }
+            elseif (strpos($line, 'DocumentRoot')){
+                $document_root = trim(str_replace('DocumentRoot', '', $line));
+            }
+         }
+
+         print_ln($server_name . ' => ' . $document_root);
+    }
+}
+
+check_files();
+
+$op = $argv[1];
+
+if ($op == 'add'){
+    check_argv($argv, 4);
+    add_vhost($argv[2], $argv[3]);
+}
+elseif ($op == 'rm'){
+    check_argv($argv, 3);
+    remove_vhost($argv[2]);
+}
+elseif ($op == 'list'){
+    check_argv($argv, 2);
+    list_vhosts();
+}
+else{
+    print_ln('ERROR: Can\'t run the operation \'' . $op . '\'.');
+}
