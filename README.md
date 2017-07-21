@@ -1,9 +1,9 @@
-# vhostman
+# vhostman for OSX
 
 What is it?
 ===========
 
-A little PHP script to quickly add, remove or list vhosts to your local apache configuration for development purposes.
+A little PHP script to quickly add, remove or list vhosts to your local apache configuration for development purposes on OSX.
 
 Installation
 ============
