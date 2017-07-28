@@ -145,8 +145,11 @@ function list_vhosts(){
         $document_root = false;
 
         foreach ($data as $line){
-            if (strpos($line, 'ServerName')){
+            if (!$server_name && strpos($line, 'ServerName')){
                 $server_name = trim(str_replace('ServerName', '', $line));
+            }
+            elseif (!$server_name && strpos($line, 'ServerAlias')){
+                $server_name = trim(str_replace('ServerAlias', '', $line));
             }
             elseif (strpos($line, 'DocumentRoot')){
                 $document_root = trim(str_replace('DocumentRoot', '', $line));
@@ -158,6 +161,11 @@ function list_vhosts(){
 }
 
 check_files();
+
+if (!isset($argv[1])){
+    print_ln('ERROR: Operation not found.');
+    die();
+}
 
 $op = $argv[1];
 
